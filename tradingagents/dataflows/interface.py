@@ -21,10 +21,6 @@ from .providers.us import get_data_in_range
 
 # 导入统一日志系统
 from tradingagents.utils.logging_init import setup_dataflow_logging
-
-# 导入日志模块
-from tradingagents.utils.logging_manager import get_logger
-logger = get_logger('agents')
 logger = setup_dataflow_logging()
 
 # 导入港股工具

@@ -32,8 +32,6 @@ try:
 except ImportError:
     ENHANCED_FETCHER_AVAILABLE = False
 
-logger = logging.getLogger(__name__)
-
 class StockDataService:
     """
     统一的股票数据获取服务

@@ -12,10 +12,7 @@ from langchain_core.callbacks import CallbackManagerForLLMRun
 
 # 导入统一日志系统
 from tradingagents.utils.logging_init import setup_llm_logging
-
-# 导入日志模块
-from tradingagents.utils.logging_manager import get_logger, get_logger_manager
-logger = get_logger('agents')
+from tradingagents.utils.logging_manager import get_logger_manager
 logger = setup_llm_logging()
 
 # 导入token跟踪器
