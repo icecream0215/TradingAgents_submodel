@@ -27,19 +27,33 @@ def _get_company_name_for_china_market(ticker: str, market_info: dict) -> str:
             from tradingagents.dataflows.interface import get_china_stock_info_unified
             stock_info = get_china_stock_info_unified(ticker)
 
+            logger.debug(f"📊 [中国市场分析师] 获取股票信息返回: {stock_info[:200] if stock_info else 'None'}...")
+
             # 解析股票名称
-            if "股票名称:" in stock_info:
+            if stock_info and "股票名称:" in stock_info:
                 company_name = stock_info.split("股票名称:")[1].split("\n")[0].strip()
-                logger.debug(f"📊 [中国市场分析师] 从统一接口获取中国股票名称: {ticker} -> {company_name}")
+                logger.info(f"✅ [中国市场分析师] 成功获取中国股票名称: {ticker} -> {company_name}")
                 return company_name
             else:
-                logger.warning(f"⚠️ [中国市场分析师] 无法从统一接口解析股票名称: {ticker}")
+                # 降级方案：尝试直接从数据源管理器获取
+                logger.warning(f"⚠️ [中国市场分析师] 无法从统一接口解析股票名称: {ticker}，尝试降级方案")
+                try:
+                    from tradingagents.dataflows.data_source_manager import get_china_stock_info_unified as get_info_dict
+                    info_dict = get_info_dict(ticker)
+                    if info_dict and info_dict.get('name'):
+                        company_name = info_dict['name']
+                        logger.info(f"✅ [中国市场分析师] 降级方案成功获取股票名称: {ticker} -> {company_name}")
+                        return company_name
+                except Exception as e:
+                    logger.error(f"❌ [中国市场分析师] 降级方案也失败: {e}")
+
+                logger.error(f"❌ [中国市场分析师] 所有方案都无法获取股票名称: {ticker}")
                 return f"股票代码{ticker}"
 
         elif market_info['is_hk']:
             # 港股：使用改进的港股工具
             try:
-                from tradingagents.dataflows.improved_hk_utils import get_hk_company_name_improved
+                from tradingagents.dataflows.providers.hk.improved_hk import get_hk_company_name_improved
                 company_name = get_hk_company_name_improved(ticker)
                 logger.debug(f"📊 [中国市场分析师] 使用改进港股工具获取名称: {ticker} -> {company_name}")
                 return company_name
@@ -182,105 +196,9 @@ def create_china_market_analyst(llm, toolkit):
             # 非Google模型的处理逻辑
             logger.debug(f"📊 [DEBUG] 非Google模型 ({llm.__class__.__name__})，使用标准处理逻辑")
             
-            # 处理中国市场分析报告
+            report = ""
             if len(result.tool_calls) == 0:
-                # 没有工具调用，直接使用LLM的回复
                 report = result.content
-                logger.info(f"📊 [中国市场分析师] 直接回复，长度: {len(report)}")
-            else:
-                # 有工具调用，执行工具并生成完整分析报告
-                logger.info(f"📊 [中国市场分析师] 工具调用: {[call.get('name', 'unknown') for call in result.tool_calls]}")
-                
-                try:
-                    # 执行工具调用
-                    from langchain_core.messages import ToolMessage, HumanMessage
-
-                    tool_messages = []
-                    for tool_call in result.tool_calls:
-                        tool_name = tool_call.get('name')
-                        tool_args = tool_call.get('args', {})
-                        tool_id = tool_call.get('id')
-
-                        logger.debug(f"📊 [DEBUG] 执行工具: {tool_name}, 参数: {tool_args}")
-
-                        # 找到对应的工具并执行
-                        tool_result = None
-                        for tool in tools:
-                            # 安全地获取工具名称进行比较
-                            current_tool_name = None
-                            if hasattr(tool, 'name'):
-                                current_tool_name = tool.name
-                            elif hasattr(tool, '__name__'):
-                                current_tool_name = tool.__name__
-
-                            if current_tool_name == tool_name:
-                                try:
-                                    tool_result = tool.invoke(tool_args)
-                                    logger.debug(f"📊 [DEBUG] 工具执行成功，结果长度: {len(str(tool_result))}")
-                                    break
-                                except Exception as tool_error:
-                                    logger.error(f"❌ [DEBUG] 工具执行失败: {tool_error}")
-                                    tool_result = f"工具执行失败: {str(tool_error)}"
-
-                        if tool_result is None:
-                            tool_result = f"未找到工具: {tool_name}"
-
-                        # 创建工具消息
-                        tool_message = ToolMessage(
-                            content=str(tool_result),
-                            tool_call_id=tool_id
-                        )
-                        tool_messages.append(tool_message)
-
-                    # 基于工具结果生成完整分析报告
-                    analysis_prompt = f"""现在请基于上述工具获取的数据，生成详细的中国市场分析报告。
-
-要求：
-1. 报告必须基于工具返回的真实数据进行分析
-2. 结合中国股市特色和政策环境进行分析
-3. 提供明确的投资建议和风险提示
-4. 报告长度不少于800字
-5. 使用中文撰写
-
-请分析股票{ticker}的中国市场情况，包括：
-- A股市场特点分析
-- 政策影响评估
-- 行业发展趋势
-- 资金流向分析
-- 中国市场投资建议"""
-
-                    # 直接使用HumanMessage包含工具结果和分析请求，避免消息格式错误
-                    analysis_with_data = f"""以下是获取到的中国市场数据：
-
-{chr(10).join([f"工具: {tc.get('name', 'unknown')} - 结果: {tm.content[:500]}..." for tc, tm in zip(result.tool_calls, tool_messages)])}
-
-{analysis_prompt}"""
-                    
-                    # 直接调用LLM，使用单个HumanMessage
-                    final_result = llm.invoke([HumanMessage(content=analysis_with_data)])
-                    report = final_result.content
-
-                    logger.info(f"📊 [中国市场分析师] 生成完整分析报告，长度: {len(report)}")
-
-                    # 返回包含工具调用和最终分析的完整消息序列
-                    return {
-                        "messages": [result] + tool_messages + [final_result],
-                        "china_market_report": report,
-                        "sender": "ChinaMarketAnalyst",
-                    }
-
-                except Exception as e:
-                    logger.error(f"❌ [中国市场分析师] 工具执行或分析生成失败: {e}")
-                    import traceback
-                    traceback.print_exc()
-
-                    # 降级处理：返回工具调用信息
-                    report = f"中国市场分析师调用了工具但分析生成失败: {[call.get('name', 'unknown') for call in result.tool_calls]}"
-                    return {
-                        "messages": [result],
-                        "china_market_report": report,
-                        "sender": "ChinaMarketAnalyst",
-                    }
         
         return {
             "messages": [result],

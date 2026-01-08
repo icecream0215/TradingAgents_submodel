@@ -95,7 +95,7 @@ class AdaptiveCacheManager:
                 import pymongo
                 self.mongodb_client = pymongo.MongoClient(
                     'localhost', 27017, 
-                    serverSelectionTimeoutMS=4000
+                    serverSelectionTimeoutMS=2000
                 )
                 # 测试连接
                 self.mongodb_client.server_info()
@@ -113,7 +113,7 @@ class AdaptiveCacheManager:
 
                 self.redis_client = redis.Redis(
                     host='localhost', port=6379, 
-                    socket_timeout=4
+                    socket_timeout=2
                 )
                 # 测试连接
                 self.redis_client.ping()

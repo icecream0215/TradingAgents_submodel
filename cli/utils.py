@@ -4,6 +4,7 @@ from rich.console import Console
 
 from cli.models import AnalystType
 from tradingagents.utils.logging_manager import get_logger
+from tradingagents.utils.stock_utils import StockUtils
 
 logger = get_logger('cli')
 console = Console()
@@ -69,12 +70,26 @@ def get_analysis_date() -> str:
     return date.strip()
 
 
-def select_analysts() -> List[AnalystType]:
+def select_analysts(ticker: str = None) -> List[AnalystType]:
     """Select analysts using an interactive checkbox."""
+
+    # 根据股票类型过滤分析师选项
+    available_analysts = ANALYST_ORDER.copy()
+
+    if ticker:
+        # 检查是否为A股
+        if StockUtils.is_china_stock(ticker):
+            # A股市场不支持社交媒体分析师
+            available_analysts = [
+                (display, value) for display, value in ANALYST_ORDER
+                if value != AnalystType.SOCIAL
+            ]
+            console.print(f"[yellow]💡 检测到A股代码 {ticker}，社交媒体分析师不可用（国内数据源限制）[/yellow]")
+
     choices = questionary.checkbox(
         "选择您的分析师团队 | Select Your [Analysts Team]:",
         choices=[
-            questionary.Choice(display, value=value) for display, value in ANALYST_ORDER
+            questionary.Choice(display, value=value) for display, value in available_analysts
         ],
         instruction="\n- 按空格键选择/取消选择分析师 | Press Space to select/unselect analysts\n- 按 'a' 键全选/取消全选 | Press 'a' to select/unselect all\n- 按回车键完成选择 | Press Enter when done",
         validate=lambda x: len(x) > 0 or "您必须至少选择一个分析师 | You must select at least one analyst.",
@@ -325,10 +340,10 @@ def select_llm_provider() -> tuple[str, str]:
     BASE_URLS = [
         ("阿里百炼 (DashScope)", "https://dashscope.aliyuncs.com/api/v1"),
         ("DeepSeek V3", "https://api.deepseek.com"),
-        ("OpenAI", "https://llm.submodel.ai/v1"),
+        ("OpenAI", "https://api.openai.com/v1"),
         ("🔧 自定义OpenAI端点", "custom"),
         ("Anthropic", "https://api.anthropic.com/"),
-        ("Google", "https://generativelanguage.googleapis.com/v1"),
+        ("Google", "https://generativelanguage.googleapis.com/v1beta"),
         ("Openrouter", "https://openrouter.ai/api/v1"),
         ("Ollama", "http://localhost:11434/v1"),
     ]
@@ -360,8 +375,8 @@ def select_llm_provider() -> tuple[str, str]:
     if url == "custom":
         custom_url = questionary.text(
             "请输入自定义OpenAI端点URL | Please enter custom OpenAI endpoint URL:",
-            default="https://llm.submodel.ai/v1",
-            instruction="例如: https://llm.submodel.ai/v1 或 http://localhost:8000/v1"
+            default="https://api.openai.com/v1",
+            instruction="例如: https://api.openai.com/v1 或 http://localhost:8000/v1"
         ).ask()
         
         if custom_url is None:

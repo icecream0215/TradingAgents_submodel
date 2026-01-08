@@ -131,15 +131,36 @@ class GoogleToolCallHandler:
             # 执行工具调用
             tool_messages = []
             tool_results = []
+            executed_tools = set()  # 防止重复调用同一工具
             
             logger.info(f"[{analyst_name}] 🔧 开始执行 {len(result.tool_calls)} 个工具调用...")
             
+            # 验证工具调用格式
+            valid_tool_calls = []
             for i, tool_call in enumerate(result.tool_calls):
+                if GoogleToolCallHandler._validate_tool_call(tool_call, i, analyst_name):
+                    valid_tool_calls.append(tool_call)
+                else:
+                    # 尝试修复工具调用
+                    fixed_tool_call = GoogleToolCallHandler._fix_tool_call(tool_call, i, analyst_name)
+                    if fixed_tool_call:
+                        valid_tool_calls.append(fixed_tool_call)
+            
+            logger.info(f"[{analyst_name}] 🔧 有效工具调用: {len(valid_tool_calls)}/{len(result.tool_calls)}")
+            
+            for i, tool_call in enumerate(valid_tool_calls):
                 tool_name = tool_call.get('name')
                 tool_args = tool_call.get('args', {})
                 tool_id = tool_call.get('id')
                 
-                logger.info(f"[{analyst_name}] 🛠️ 执行工具 {i+1}/{len(result.tool_calls)}: {tool_name}")
+                # 防止重复调用同一工具（特别是统一市场数据工具）
+                tool_signature = f"{tool_name}_{hash(str(tool_args))}"
+                if tool_signature in executed_tools:
+                    logger.warning(f"[{analyst_name}] ⚠️ 跳过重复工具调用: {tool_name}")
+                    continue
+                executed_tools.add(tool_signature)
+                
+                logger.info(f"[{analyst_name}] 🛠️ 执行工具 {i+1}/{len(valid_tool_calls)}: {tool_name}")
                 logger.info(f"[{analyst_name}] 参数: {tool_args}")
                 logger.debug(f"[{analyst_name}] 🔧 工具调用详情: {tool_call}")
                 
@@ -206,70 +227,39 @@ class GoogleToolCallHandler:
             # 第二次调用模型生成最终分析报告
             logger.info(f"[{analyst_name}] 🚀 基于工具结果生成最终分析报告...")
             
-            # 安全地构建消息序列，确保所有消息都是有效的LangChain消息类型
+            # 🔧 [优化] 不累积历史消息，只保留当前分析所需的消息
+            # 原因：
+            # 1. 基本面分析师不需要其他分析师的历史消息
+            # 2. 避免消息过长（之前累积到 55,096 字符）
+            # 3. 降低 token 消耗和成本
+            # 4. 后续有 Research Manager 负责综合所有分析师的报告
             safe_messages = []
-            
-            # 添加历史消息（只保留有效的LangChain消息）
+
+            # 只保留初始的用户消息（如果有）
             if "messages" in state and state["messages"]:
+                # 只保留第一条 HumanMessage（通常是初始任务描述）
                 for msg in state["messages"]:
-                    try:
-                        if hasattr(msg, 'content') and hasattr(msg, '__class__'):
-                            # 检查是否是有效的LangChain消息类型
-                            msg_class_name = msg.__class__.__name__
-                            if msg_class_name in ['HumanMessage', 'AIMessage', 'SystemMessage', 'ToolMessage']:
-                                safe_messages.append(msg)
-                            else:
-                                # 转换为HumanMessage
-                                logger.warning(f"[{analyst_name}] ⚠️ 转换非标准消息类型: {msg_class_name}")
-                                safe_messages.append(HumanMessage(content=str(msg.content)))
-                    except Exception as msg_error:
-                        logger.warning(f"[{analyst_name}] ⚠️ 跳过无效消息: {msg_error}")
-                        continue
-            
-            # 添加当前结果（确保是AIMessage）
+                    if isinstance(msg, HumanMessage):
+                        safe_messages.append(msg)
+                        logger.debug(f"[{analyst_name}] 📝 保留初始用户消息")
+                        break
+
+            # 添加当前结果（AI 的工具调用）
             if hasattr(result, 'content'):
                 safe_messages.append(result)
-            
-            # 添加工具消息
+                logger.debug(f"[{analyst_name}] 📝 添加 AI 工具调用消息")
+
+            # 添加工具消息（工具执行结果）
             safe_messages.extend(tool_messages)
-            
+            logger.debug(f"[{analyst_name}] 📝 添加 {len(tool_messages)} 条工具消息")
+
             # 添加分析提示
             safe_messages.append(HumanMessage(content=analysis_prompt_template))
+            logger.debug(f"[{analyst_name}] 📝 添加分析提示")
             
-            # 检查消息序列长度，避免过长
+            # 记录消息序列信息
             total_length = sum(len(str(msg.content)) for msg in safe_messages if hasattr(msg, 'content'))
-            if total_length > 50000:
-                logger.warning(f"[{analyst_name}] ⚠️ 消息序列过长 ({total_length} 字符)，进行优化...")
-                
-                # 优化策略：保留最重要的消息
-                optimized_messages = []
-                
-                # 保留最后的用户消息
-                if safe_messages and isinstance(safe_messages[0], HumanMessage):
-                    optimized_messages.append(safe_messages[0])
-                
-                # 保留工具调用结果
-                optimized_messages.append(result)
-                
-                # 保留工具消息（截断过长的内容）
-                for tool_msg in tool_messages:
-                    if len(tool_msg.content) > 5000:
-                        truncated_content = tool_msg.content[:5000] + "\n\n[注：数据已截断以确保处理效率]"
-                        optimized_tool_msg = ToolMessage(
-                            content=truncated_content,
-                            tool_call_id=tool_msg.tool_call_id
-                        )
-                        optimized_messages.append(optimized_tool_msg)
-                    else:
-                        optimized_messages.append(tool_msg)
-                
-                # 保留分析提示
-                optimized_messages.append(HumanMessage(content=analysis_prompt_template))
-                
-                safe_messages = optimized_messages
-                logger.info(f"[{analyst_name}] ✅ 消息序列优化完成，新长度: {sum(len(str(msg.content)) for msg in safe_messages)} 字符")
-            
-            logger.info(f"[{analyst_name}] 📊 最终消息序列: {len(safe_messages)} 条消息")
+            logger.info(f"[{analyst_name}] 📊 消息序列: {len(safe_messages)} 条消息, 总长度: {total_length:,} 字符")
             
             # 检查消息序列是否为空
             if not safe_messages:
@@ -363,14 +353,116 @@ class GoogleToolCallHandler:
             return report, [result]
     
     @staticmethod
-    def _get_tool_name(tool) -> str:
-        """安全地获取工具名称"""
+    def _get_tool_name(tool):
+        """获取工具名称"""
         if hasattr(tool, 'name'):
             return tool.name
         elif hasattr(tool, '__name__'):
             return tool.__name__
         else:
             return str(tool)
+    
+    @staticmethod
+    def _validate_tool_call(tool_call, index, analyst_name):
+        """验证工具调用格式"""
+        try:
+            if not isinstance(tool_call, dict):
+                logger.warning(f"[{analyst_name}] ⚠️ 工具调用 {index} 不是字典格式: {type(tool_call)}")
+                return False
+            
+            # 检查必需字段
+            required_fields = ['name', 'args', 'id']
+            for field in required_fields:
+                if field not in tool_call:
+                    logger.warning(f"[{analyst_name}] ⚠️ 工具调用 {index} 缺少字段 '{field}': {tool_call}")
+                    return False
+            
+            # 检查工具名称
+            tool_name = tool_call.get('name')
+            if not isinstance(tool_name, str) or not tool_name.strip():
+                logger.warning(f"[{analyst_name}] ⚠️ 工具调用 {index} 工具名称无效: {tool_name}")
+                return False
+            
+            # 检查参数
+            tool_args = tool_call.get('args')
+            if not isinstance(tool_args, dict):
+                logger.warning(f"[{analyst_name}] ⚠️ 工具调用 {index} 参数不是字典格式: {type(tool_args)}")
+                return False
+            
+            # 检查ID
+            tool_id = tool_call.get('id')
+            if not isinstance(tool_id, str) or not tool_id.strip():
+                logger.warning(f"[{analyst_name}] ⚠️ 工具调用 {index} ID无效: {tool_id}")
+                return False
+            
+            logger.debug(f"[{analyst_name}] ✅ 工具调用 {index} 验证通过: {tool_name}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"[{analyst_name}] ❌ 工具调用 {index} 验证异常: {e}")
+            return False
+    
+    @staticmethod
+    def _fix_tool_call(tool_call, index, analyst_name):
+        """尝试修复工具调用格式"""
+        try:
+            logger.info(f"[{analyst_name}] 🔧 尝试修复工具调用 {index}: {tool_call}")
+            
+            if not isinstance(tool_call, dict):
+                logger.warning(f"[{analyst_name}] ❌ 无法修复非字典格式的工具调用: {type(tool_call)}")
+                return None
+            
+            fixed_tool_call = tool_call.copy()
+            
+            # 修复工具名称
+            if 'name' not in fixed_tool_call or not isinstance(fixed_tool_call['name'], str):
+                if 'function' in fixed_tool_call and isinstance(fixed_tool_call['function'], dict):
+                    # OpenAI格式转换
+                    function_data = fixed_tool_call['function']
+                    if 'name' in function_data:
+                        fixed_tool_call['name'] = function_data['name']
+                        if 'arguments' in function_data:
+                            import json
+                            try:
+                                if isinstance(function_data['arguments'], str):
+                                    fixed_tool_call['args'] = json.loads(function_data['arguments'])
+                                else:
+                                    fixed_tool_call['args'] = function_data['arguments']
+                            except json.JSONDecodeError:
+                                fixed_tool_call['args'] = {}
+                else:
+                    logger.warning(f"[{analyst_name}] ❌ 无法确定工具名称")
+                    return None
+            
+            # 修复参数
+            if 'args' not in fixed_tool_call:
+                fixed_tool_call['args'] = {}
+            elif not isinstance(fixed_tool_call['args'], dict):
+                try:
+                    import json
+                    if isinstance(fixed_tool_call['args'], str):
+                        fixed_tool_call['args'] = json.loads(fixed_tool_call['args'])
+                    else:
+                        fixed_tool_call['args'] = {}
+                except:
+                    fixed_tool_call['args'] = {}
+            
+            # 修复ID
+            if 'id' not in fixed_tool_call or not isinstance(fixed_tool_call['id'], str):
+                import uuid
+                fixed_tool_call['id'] = f"call_{uuid.uuid4().hex[:8]}"
+            
+            # 验证修复后的工具调用
+            if GoogleToolCallHandler._validate_tool_call(fixed_tool_call, index, analyst_name):
+                logger.info(f"[{analyst_name}] ✅ 工具调用 {index} 修复成功: {fixed_tool_call['name']}")
+                return fixed_tool_call
+            else:
+                logger.warning(f"[{analyst_name}] ❌ 工具调用 {index} 修复失败")
+                return None
+                
+        except Exception as e:
+            logger.error(f"[{analyst_name}] ❌ 工具调用 {index} 修复异常: {e}")
+            return None
     
     @staticmethod
     def handle_simple_google_response(

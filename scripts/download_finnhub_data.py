@@ -87,7 +87,7 @@ class FinnhubDataDownloader:
         url = f"{self.base_url}/{endpoint}"
         
         try:
-            response = self.session.get(url, params=params, timeout=60)
+            response = self.session.get(url, params=params, timeout=30)
             response.raise_for_status()
             
             # 检查API限制

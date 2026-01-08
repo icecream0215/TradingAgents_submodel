@@ -42,8 +42,8 @@ class SmartConfigManager:
             client = MongoClient(
                 'localhost', 
                 27017, 
-                serverSelectionTimeoutMS=4000,
-                connectTimeoutMS=4000
+                serverSelectionTimeoutMS=2000,
+                connectTimeoutMS=2000
             )
             client.server_info()  # 触发连接测试
             client.close()
@@ -65,8 +65,8 @@ class SmartConfigManager:
             r = redis.Redis(
                 host='localhost', 
                 port=6379, 
-                socket_timeout=4,
-                socket_connect_timeout=4
+                socket_timeout=2,
+                socket_connect_timeout=2
             )
             r.ping()
             

@@ -7,7 +7,7 @@
 ## 🔄 移动的文件
 
 ### 测试文件 (test_*.py)
-- `test_akshare_hk.py`·
+- `test_akshare_hk.py`
 - `test_all_analysts_hk_fix.py`
 - `test_cli_hk.py`
 - `test_conditional_logic_fix.py`

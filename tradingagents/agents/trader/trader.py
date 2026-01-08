@@ -48,8 +48,15 @@ def create_trader(llm, memory):
             past_memories = []
             past_memory_str = "暂无历史记忆数据可参考。"
 
-        # 构建完整的提示内容
-        full_prompt = f"""您是一位专业的交易员，负责分析市场数据并做出投资决策。基于您的分析，请提供具体的买入、卖出或持有建议。
+        context = {
+            "role": "user",
+            "content": f"Based on a comprehensive analysis by a team of analysts, here is an investment plan tailored for {company_name}. This plan incorporates insights from current technical market trends, macroeconomic indicators, and social media sentiment. Use this plan as a foundation for evaluating your next trading decision.\n\nProposed Investment Plan: {investment_plan}\n\nLeverage these insights to make an informed and strategic decision.",
+        }
+
+        messages = [
+            {
+                "role": "system",
+                "content": f"""您是一位专业的交易员，负责分析市场数据并做出投资决策。基于您的分析，请提供具体的买入、卖出或持有建议。
 
 ⚠️ 重要提醒：当前分析的股票代码是 {company_name}，请使用正确的货币单位：{currency}（{currency_symbol}）
 
@@ -85,20 +92,15 @@ def create_trader(llm, memory):
 
 请用中文撰写分析内容，并始终以'最终交易建议: **买入/持有/卖出**'结束您的回应以确认您的建议。
 
-请不要忘记利用过去决策的经验教训来避免重复错误。以下是类似情况下的交易反思和经验教训: {past_memory_str}
-
-基于分析师团队的综合分析，这是为 {company_name} 量身定制的投资计划。该计划结合了当前技术市场趋势、宏观经济指标和社交媒体情绪的见解。请将此计划作为评估下一个交易决策的基础。
-
-建议投资计划: {investment_plan}
-
-请利用这些见解做出明智和战略性的决定。"""
+请不要忘记利用过去决策的经验教训来避免重复错误。以下是类似情况下的交易反思和经验教训: {past_memory_str}""",
+            },
+            context,
+        ]
 
         logger.debug(f"💰 [DEBUG] 准备调用LLM，系统提示包含货币: {currency}")
         logger.debug(f"💰 [DEBUG] 系统提示中的关键部分: 目标价格({currency})")
 
-        # 使用正确的LangChain消息格式
-        from langchain_core.messages import HumanMessage
-        result = llm.invoke([HumanMessage(content=full_prompt)])
+        result = llm.invoke(messages)
 
         logger.debug(f"💰 [DEBUG] LLM调用完成")
         logger.debug(f"💰 [DEBUG] 交易员回复长度: {len(result.content)}")

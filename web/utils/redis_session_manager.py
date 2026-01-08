@@ -41,8 +41,8 @@ class RedisSessionManager:
                 password=redis_password,
                 db=redis_db,
                 decode_responses=True,
-                socket_timeout=10,
-                socket_connect_timeout=10
+                socket_timeout=5,
+                socket_connect_timeout=5
             )
             
             # 测试连接

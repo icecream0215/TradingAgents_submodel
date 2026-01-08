@@ -31,7 +31,7 @@ def check_mongodb_availability():
     if pymongo_available:
         try:
             from pymongo import MongoClient
-            client = MongoClient('localhost', 27017, serverSelectionTimeoutMS=4000)
+            client = MongoClient('localhost', 27017, serverSelectionTimeoutMS=2000)
             client.server_info()  # 触发连接
             logger.info(f"✅ MongoDB 服务正在运行")
             mongodb_running = True
@@ -60,7 +60,7 @@ def check_redis_availability():
     if redis_available:
         try:
             import redis
-            r = redis.Redis(host='localhost', port=6379, socket_timeout=4)
+            r = redis.Redis(host='localhost', port=6379, socket_timeout=2)
             r.ping()
             logger.info(f"✅ Redis 服务正在运行")
             redis_running = True

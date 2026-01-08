@@ -105,20 +105,10 @@ def run_stock_analysis(stock_symbol, analysis_date, analysts, research_depth, ll
         analysis_date: 分析日期
         analysts: 分析师列表
         research_depth: 研究深度
-        llm_provider: LLM提供商 (固定为openai)
-        llm_model: 大模型名称 (固定为deepseek-ai/DeepSeek-V3.1)
+        llm_provider: LLM提供商 (dashscope/deepseek/google)
+        llm_model: 大模型名称
         progress_callback: 进度回调函数，用于更新UI状态
     """
-    
-    # 🚀 使用用户选择的模型配置
-    # 保持提供商固定为openai，但模型使用用户选择的
-    llm_provider = "openai"  # 固定使用OpenAI兼容接口
-    # llm_model 使用传入的参数，即用户在界面中选择的模型
-    
-    logger.info(f"🚀 [模型配置] 使用用户选择的模型")
-    logger.info(f"🎯 [模型配置] 提供商: {llm_provider}")
-    logger.info(f"🎯 [模型配置] 模型: {llm_model}")
-    logger.info(f"🌐 [模型配置] API端点: https://llm.submodel.ai/v1")
 
     def update_progress(message, step=None, total_steps=None):
         """更新进度"""
@@ -205,7 +195,14 @@ def run_stock_analysis(stock_symbol, analysis_date, analysts, research_depth, ll
     if TOKEN_TRACKING_ENABLED:
         estimated_input = 2000 * len(analysts)  # 估算每个分析师2000个输入token
         estimated_output = 1000 * len(analysts)  # 估算每个分析师1000个输出token
-        estimated_cost = token_tracker.estimate_cost(llm_provider, llm_model, estimated_input, estimated_output)
+        estimated_cost_result = token_tracker.estimate_cost(llm_provider, llm_model, estimated_input, estimated_output)
+
+        # estimate_cost 返回 tuple (cost, currency)
+        if isinstance(estimated_cost_result, tuple):
+            estimated_cost, currency = estimated_cost_result
+        else:
+            estimated_cost = estimated_cost_result
+            currency = "CNY"
 
         update_progress(f"💰 预估分析成本: ¥{estimated_cost:.4f}")
 
@@ -240,8 +237,8 @@ def run_stock_analysis(stock_symbol, analysis_date, analysts, research_depth, ll
         if research_depth == 1:  # 1级 - 快速分析
             config["max_debate_rounds"] = 1
             config["max_risk_discuss_rounds"] = 1
-            # 从环境变量读取内存功能配置，默认启用
-            config["memory_enabled"] = os.getenv("MEMORY_ENABLED", "true").lower() in ("true", "1", "yes", "on")
+            # 禁用记忆以加速
+            config["memory_enabled"] = False
 
             # 统一使用在线工具，避免离线工具的各种问题
             config["online_tools"] = True  # 所有市场都使用统一工具
@@ -255,8 +252,7 @@ def run_stock_analysis(stock_symbol, analysis_date, analysts, research_depth, ll
         elif research_depth == 2:  # 2级 - 基础分析
             config["max_debate_rounds"] = 1
             config["max_risk_discuss_rounds"] = 1
-            # 从环境变量读取内存功能配置，默认启用
-            config["memory_enabled"] = os.getenv("MEMORY_ENABLED", "true").lower() in ("true", "1", "yes", "on")
+            config["memory_enabled"] = True
             config["online_tools"] = True
             if llm_provider == "dashscope":
                 config["quick_think_llm"] = "qwen-plus"
@@ -282,36 +278,33 @@ def run_stock_analysis(stock_symbol, analysis_date, analysts, research_depth, ll
         elif research_depth == 3:  # 3级 - 标准分析 (默认)
             config["max_debate_rounds"] = 1
             config["max_risk_discuss_rounds"] = 2
-            # 从环境变量读取内存功能配置，默认启用
-            config["memory_enabled"] = os.getenv("MEMORY_ENABLED", "true").lower() in ("true", "1", "yes", "on")
+            config["memory_enabled"] = True
             config["online_tools"] = True
             if llm_provider == "dashscope":
                 config["quick_think_llm"] = "qwen-plus"
-                config["deep_think_llm"] = "qwen-max"
+                config["deep_think_llm"] = "qwen3-max"
             elif llm_provider == "deepseek":
                 config["quick_think_llm"] = "deepseek-chat"
                 config["deep_think_llm"] = "deepseek-chat"
         elif research_depth == 4:  # 4级 - 深度分析
             config["max_debate_rounds"] = 2
             config["max_risk_discuss_rounds"] = 2
-            # 从环境变量读取内存功能配置，默认启用
-            config["memory_enabled"] = os.getenv("MEMORY_ENABLED", "true").lower() in ("true", "1", "yes", "on")
+            config["memory_enabled"] = True
             config["online_tools"] = True
             if llm_provider == "dashscope":
                 config["quick_think_llm"] = "qwen-plus"
-                config["deep_think_llm"] = "qwen-max"
+                config["deep_think_llm"] = "qwen3-max"
             elif llm_provider == "deepseek":
                 config["quick_think_llm"] = "deepseek-chat"
                 config["deep_think_llm"] = "deepseek-chat"
         else:  # 5级 - 全面分析
             config["max_debate_rounds"] = 3
             config["max_risk_discuss_rounds"] = 3
-            # 从环境变量读取内存功能配置，默认启用
-            config["memory_enabled"] = os.getenv("MEMORY_ENABLED", "true").lower() in ("true", "1", "yes", "on")
+            config["memory_enabled"] = True
             config["online_tools"] = True
             if llm_provider == "dashscope":
-                config["quick_think_llm"] = "qwen-max"
-                config["deep_think_llm"] = "qwen-max"
+                config["quick_think_llm"] = "qwen3-max"
+                config["deep_think_llm"] = "qwen3-max"
             elif llm_provider == "deepseek":
                 config["quick_think_llm"] = "deepseek-chat"
                 config["deep_think_llm"] = "deepseek-chat"
@@ -321,9 +314,25 @@ def run_stock_analysis(stock_symbol, analysis_date, analysts, research_depth, ll
             config["backend_url"] = "https://dashscope.aliyuncs.com/api/v1"
         elif llm_provider == "deepseek":
             config["backend_url"] = "https://api.deepseek.com"
+        elif llm_provider == "qianfan":
+            # 千帆（文心一言）配置
+            config["backend_url"] = "https://aip.baidubce.com"
+            # 根据研究深度设置千帆模型
+            if research_depth <= 2:  # 快速和基础分析
+                config["quick_think_llm"] = "ernie-3.5-8k"
+                config["deep_think_llm"] = "ernie-3.5-8k"
+            elif research_depth <= 4:  # 标准和深度分析
+                config["quick_think_llm"] = "ernie-3.5-8k"
+                config["deep_think_llm"] = "ernie-4.0-turbo-8k"
+            else:  # 全面分析
+                config["quick_think_llm"] = "ernie-4.0-turbo-8k"
+                config["deep_think_llm"] = "ernie-4.0-turbo-8k"
+            
+            logger.info(f"🤖 [千帆] 快速模型: {config['quick_think_llm']}")
+            logger.info(f"🤖 [千帆] 深度模型: {config['deep_think_llm']}")
         elif llm_provider == "google":
             # Google AI不需要backend_url，使用默认的OpenAI格式
-            config["backend_url"] = "https://llm.submodel.ai/v1"
+            config["backend_url"] = "https://api.openai.com/v1"
             
             # 根据研究深度优化Google模型选择
             if research_depth == 1:  # 快速分析 - 使用最快模型
@@ -345,18 +354,10 @@ def run_stock_analysis(stock_symbol, analysis_date, analysts, research_depth, ll
             logger.info(f"🤖 [Google AI] 快速模型: {config['quick_think_llm']}")
             logger.info(f"🤖 [Google AI] 深度模型: {config['deep_think_llm']}")
         elif llm_provider == "openai":
-            # OpenAI兼容API - 支持第三方服务和DeepSeek模型
-            if llm_model.startswith("deepseek-ai/"):
-                # 使用第三方服务调用DeepSeek模型
-                config["backend_url"] = "https://llm.submodel.ai/v1"
-                logger.info(f"🚀 [OpenAI-DeepSeek] 使用第三方服务调用DeepSeek模型: {llm_model}")
-                logger.info(f"🚀 [OpenAI-DeepSeek] API端点: https://llm.submodel.ai/v1")
-                logger.info(f"💡 [OpenAI-DeepSeek] 使用OPENAI_API_KEY进行认证")
-            else:
-                # 标准OpenAI模型 - 也使用第三方服务以避免网络问题
-                config["backend_url"] = "https://llm.submodel.ai/v1"
-                logger.info(f"🤖 [OpenAI] 使用模型: {llm_model}")
-                logger.info(f"🤖 [OpenAI] API端点: https://llm.submodel.ai/v1")
+            # OpenAI官方API
+            config["backend_url"] = "https://api.openai.com/v1"
+            logger.info(f"🤖 [OpenAI] 使用模型: {llm_model}")
+            logger.info(f"🤖 [OpenAI] API端点: https://api.openai.com/v1")
         elif llm_provider == "openrouter":
             # OpenRouter使用OpenAI兼容API
             config["backend_url"] = "https://openrouter.ai/api/v1"
@@ -368,7 +369,7 @@ def run_stock_analysis(stock_symbol, analysis_date, analysts, research_depth, ll
             logger.info(f"🌐 [SiliconFlow] API端点: https://api.siliconflow.cn/v1")
         elif llm_provider == "custom_openai":
             # 自定义OpenAI端点
-            custom_base_url = config.get("custom_openai_base_url", "https://llm.submodel.ai/v1")
+            custom_base_url = st.session_state.get("custom_openai_base_url", "https://api.openai.com/v1")
             config["backend_url"] = custom_base_url
             config["custom_openai_base_url"] = custom_base_url
             logger.info(f"🔧 [自定义OpenAI] 使用模型: {llm_model}")
@@ -454,9 +455,9 @@ def run_stock_analysis(stock_symbol, analysis_date, analysts, research_depth, ll
 
         logger.debug(f"🔍 [RUNNER DEBUG] 最终传递给分析引擎的股票代码: '{formatted_symbol}'")
 
-        # 初始化交易图，传递session_id用于token跟踪
+        # 初始化交易图
         update_progress("🔧 初始化分析引擎...")
-        graph = TradingAgentsGraph(analysts, config=config, debug=False, session_id=session_id)
+        graph = TradingAgentsGraph(analysts, config=config, debug=False)
 
         # 执行分析
         update_progress(f"📊 开始分析 {formatted_symbol} 股票，这可能需要几分钟时间...")
@@ -481,9 +482,27 @@ def run_stock_analysis(stock_symbol, analysis_date, analysts, research_depth, ll
         if risk_assessment:
             state['risk_assessment'] = risk_assessment
 
-        # Token使用量现在由LLM调用自动记录，无需手动估算
+        # 记录Token使用（实际使用量，这里使用估算值）
         if TOKEN_TRACKING_ENABLED:
-            logger.info(f"📊 Token使用量将由LLM调用自动记录，会话ID: {session_id}")
+            # 在实际应用中，这些值应该从LLM响应中获取
+            # 这里使用基于分析师数量和研究深度的估算
+            actual_input_tokens = len(analysts) * (1500 if research_depth == "快速" else 2500 if research_depth == "标准" else 4000)
+            actual_output_tokens = len(analysts) * (800 if research_depth == "快速" else 1200 if research_depth == "标准" else 2000)
+
+            usage_record = token_tracker.track_usage(
+                provider=llm_provider,
+                model_name=llm_model,
+                input_tokens=actual_input_tokens,
+                output_tokens=actual_output_tokens,
+                session_id=session_id,
+                analysis_type=f"{market_type}_analysis"
+            )
+
+            if usage_record:
+                update_progress(f"💰 记录使用成本: ¥{usage_record.cost:.4f}")
+
+        # 从决策中提取模型信息
+        model_info = decision.get('model_info', 'Unknown') if isinstance(decision, dict) else 'Unknown'
 
         results = {
             'stock_symbol': stock_symbol,
@@ -492,6 +511,7 @@ def run_stock_analysis(stock_symbol, analysis_date, analysts, research_depth, ll
             'research_depth': research_depth,
             'llm_provider': llm_provider,
             'llm_model': llm_model,
+            'model_info': model_info,  # 🔥 添加模型信息字段
             'state': state,
             'decision': decision,
             'success': True,
@@ -525,6 +545,42 @@ def run_stock_analysis(stock_symbol, analysis_date, analysts, research_depth, ll
                        'success': True,
                        'event_type': 'web_analysis_complete'
                    })
+
+        # 保存分析报告到本地和MongoDB
+        try:
+            update_progress("💾 正在保存分析报告...")
+            from .report_exporter import save_analysis_report, save_modular_reports_to_results_dir
+            
+            # 1. 保存分模块报告到本地目录
+            logger.info(f"📁 [本地保存] 开始保存分模块报告到本地目录")
+            local_files = save_modular_reports_to_results_dir(results, stock_symbol)
+            if local_files:
+                logger.info(f"✅ [本地保存] 已保存 {len(local_files)} 个本地报告文件")
+                for module, path in local_files.items():
+                    logger.info(f"  - {module}: {path}")
+            else:
+                logger.warning(f"⚠️ [本地保存] 本地报告文件保存失败")
+            
+            # 2. 保存分析报告到MongoDB
+            logger.info(f"🗄️ [MongoDB保存] 开始保存分析报告到MongoDB")
+            save_success = save_analysis_report(
+                stock_symbol=stock_symbol,
+                analysis_results=results
+            )
+            
+            if save_success:
+                logger.info(f"✅ [MongoDB保存] 分析报告已成功保存到MongoDB")
+                update_progress("✅ 分析报告已保存到数据库和本地文件")
+            else:
+                logger.warning(f"⚠️ [MongoDB保存] MongoDB报告保存失败")
+                if local_files:
+                    update_progress("✅ 本地报告已保存，但数据库保存失败")
+                else:
+                    update_progress("⚠️ 报告保存失败，但分析已完成")
+                
+        except Exception as save_error:
+            logger.error(f"❌ [报告保存] 保存分析报告时发生错误: {str(save_error)}")
+            update_progress("⚠️ 报告保存出错，但分析已完成")
 
         update_progress("✅ 分析成功完成！")
         return results
@@ -565,56 +621,6 @@ def run_stock_analysis(stock_symbol, analysis_date, analysts, research_depth, ll
             'is_demo': False,
             'error_reason': f"分析失败: {str(e)}"
         }
-
-def get_session_token_usage(session_id):
-    """获取会话的Token使用统计，使用用户自定义价格计算成本"""
-    
-    if not session_id:
-        return None
-    
-    try:
-        from tradingagents.config.config_manager import token_tracker
-        
-        # 获取当前使用记录
-        usage_records = token_tracker.config_manager.load_usage_records()
-        
-        # 筛选出当前会话的记录
-        session_records = [record for record in usage_records if record.session_id == session_id]
-        
-        if not session_records:
-            return None
-        
-        # 统计总的tokens
-        total_input_tokens = sum(record.input_tokens for record in session_records)
-        total_output_tokens = sum(record.output_tokens for record in session_records)
-        total_tokens = total_input_tokens + total_output_tokens
-        
-        # 使用用户自定义价格计算成本
-        from web.components.sidebar import load_token_pricing_config
-        pricing_config = load_token_pricing_config()
-        
-        # 使用简化的通用价格配置
-        input_price = pricing_config.get("input_price", 0.002)
-        output_price = pricing_config.get("output_price", 0.004)
-        
-        total_cost = 0.0
-        for record in session_records:
-            cost = (record.input_tokens / 1000) * input_price + (record.output_tokens / 1000) * output_price
-            total_cost += cost
-        
-        return {
-            'session_id': session_id,
-            'total_tokens': total_tokens,
-            'input_tokens': total_input_tokens,
-            'output_tokens': total_output_tokens,
-            'total_cost': round(total_cost, 6),
-            'records_count': len(session_records)
-        }
-        
-    except Exception as e:
-        logger.warning(f"⚠️ 获取Token使用统计失败: {e}")
-        return None
-
 
 def format_analysis_results(results):
     """格式化分析结果用于显示"""
@@ -715,31 +721,39 @@ def format_analysis_results(results):
         'final_trade_decision'      # 最终交易决策
     ]
     
+    # 添加调试信息
+    logger.debug(f"🔍 [格式化调试] 原始state中的键: {list(state.keys())}")
+    for key in state.keys():
+        if isinstance(state[key], str):
+            logger.debug(f"🔍 [格式化调试] {key}: 字符串长度 {len(state[key])}")
+        elif isinstance(state[key], dict):
+            logger.debug(f"🔍 [格式化调试] {key}: 字典，包含键 {list(state[key].keys())}")
+        else:
+            logger.debug(f"🔍 [格式化调试] {key}: {type(state[key])}")
+
     for key in analysis_keys:
         if key in state:
             # 对文本内容进行中文化处理
             content = state[key]
             if isinstance(content, str):
                 content = translate_analyst_labels(content)
+                logger.debug(f"🔍 [格式化调试] 处理字符串字段 {key}: 长度 {len(content)}")
+            elif isinstance(content, dict):
+                logger.debug(f"🔍 [格式化调试] 处理字典字段 {key}: 包含键 {list(content.keys())}")
             formatted_state[key] = content
         elif key == 'risk_assessment':
             # 特殊处理：从 risk_debate_state 生成 risk_assessment
             risk_assessment = extract_risk_assessment(state)
             if risk_assessment:
                 formatted_state[key] = risk_assessment
-    
-    # 检查是否是演示模式
-    is_demo = results.get('is_demo', False)
+        else:
+            logger.debug(f"🔍 [格式化调试] 缺失字段: {key}")
     
     return {
         'stock_symbol': results['stock_symbol'],
         'decision': formatted_decision,
         'state': formatted_state,
         'success': True,
-        'is_demo': is_demo,
-        # Token使用统计 - 只在非演示模式下获取
-        'token_usage': get_session_token_usage(results.get('session_id')) if not is_demo else None,
-        'session_id': results.get('session_id'),  # 确保session_id被传递
         # 将配置信息放在顶层，供前端直接访问
         'analysis_date': results['analysis_date'],
         'analysts': results['analysts'],

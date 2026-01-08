@@ -84,7 +84,8 @@ def render_analysis_info(results):
             llm_provider = results.get('llm_provider', 'dashscope')
             provider_name = {
                 'dashscope': '阿里百炼',
-                'google': 'Google AI'
+                'google': 'Google AI',
+                'qianfan': '文心一言（千帆）'
             }.get(llm_provider, llm_provider)
 
             st.metric(
@@ -102,7 +103,9 @@ def render_analysis_info(results):
                 'qwen-max': 'Qwen Max',
                 'gemini-2.0-flash': 'Gemini 2.0 Flash',
                 'gemini-1.5-pro': 'Gemini 1.5 Pro',
-                'gemini-1.5-flash': 'Gemini 1.5 Flash'
+                'gemini-1.5-flash': 'Gemini 1.5 Flash',
+                'ERNIE-Speed-8K': 'ERNIE Speed 8K',
+                'ERNIE-Lite-8K': 'ERNIE Lite 8K'
             }.get(llm_model, llm_model)
 
             st.metric(
@@ -135,53 +138,6 @@ def render_analysis_info(results):
 
             analyst_list = [analyst_names.get(analyst, analyst) for analyst in analysts]
             st.write(" • ".join(analyst_list))
-
-        # Token使用统计（仅非演示模式下显示）
-        is_demo = results.get('is_demo', False)
-        token_usage = results.get('token_usage')
-        session_id = results.get('session_id')
-        
-        if not is_demo:
-            st.markdown("---")
-            st.subheader("💰 本次分析Token使用统计")
-            
-            # 如果有token_usage数据，直接显示
-            if token_usage:
-                col1, col2, col3, col4 = st.columns(4)
-                with col1:
-                    st.metric(
-                        label="输入Tokens",
-                        value=f"{token_usage['input_tokens']:,}",
-                        help="用于输入prompt的token数量"
-                    )
-                with col2:
-                    st.metric(
-                        label="输出Tokens", 
-                        value=f"{token_usage['output_tokens']:,}",
-                        help="模型生成的token数量"
-                    )
-                with col3:
-                    st.metric(
-                        label="总Tokens",
-                        value=f"{token_usage['total_tokens']:,}",
-                        help="输入+输出token总数"
-                    )
-                with col4:
-                    st.metric(
-                        label="总成本",
-                        value=f"¥{token_usage['total_cost']:.4f}",
-                        help="本次分析的总成本"
-                    )
-                # 显示详细信息
-                if token_usage.get('records_count', 0) > 1:
-                    st.info(f"📊 本次分析共进行了 {token_usage['records_count']} 次LLM调用")
-            # 如果有session_id但没有token_usage，显示正在获取或检查信息
-            elif session_id:
-                st.info("⏳ 正在获取Token使用统计信息...")
-            # 如果既没有token_usage也没有session_id，显示配置提示
-            else:
-                st.info("💡 Token使用统计功能需要配置相关设置才能显示")
-        # 演示模式下不显示Token统计
 
 def render_decision_summary(decision, stock_symbol=None):
     """渲染投资决策摘要"""

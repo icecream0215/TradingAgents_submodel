@@ -70,16 +70,7 @@ def render_model_config():
         for i, model in enumerate(models):
             # 检查API密钥来源
             env_has_key = env_status["api_keys"].get(model.provider.lower(), False)
-            # 安全地显示API密钥（处理SecretStr类型）
-            if model.api_key:
-                if hasattr(model.api_key, 'get_secret_value'):
-                    key_value = model.api_key.get_secret_value()
-                    api_key_display = "***" + key_value[-4:] if len(key_value) >= 4 else "***"
-                else:
-                    key_str = str(model.api_key)
-                    api_key_display = "***" + key_str[-4:] if len(key_str) >= 4 else "***"
-            else:
-                api_key_display = "未设置"
+            api_key_display = "***" + model.api_key[-4:] if model.api_key else "未设置"
             if env_has_key:
                 api_key_display += " (.env)"
 

@@ -61,7 +61,7 @@ def initialize_system():
         import pymongo
         from pymongo import MongoClient
         
-        client = MongoClient('localhost', 27017, serverSelectionTimeoutMS=4000)
+        client = MongoClient('localhost', 27017, serverSelectionTimeoutMS=2000)
         client.server_info()
         client.close()
         mongodb_available = True
@@ -76,7 +76,7 @@ def initialize_system():
     try:
         import redis
         
-        r = redis.Redis(host='localhost', port=6379, socket_timeout=4)
+        r = redis.Redis(host='localhost', port=6379, socket_timeout=2)
         r.ping()
         redis_available = True
         logger.info(f"✅ Redis: 可用")
@@ -110,14 +110,14 @@ def initialize_system():
                 "host": "localhost",
                 "port": 27017,
                 "database": "tradingagents",
-                "timeout": 4000,
+                "timeout": 2000,
                 "auto_detect": True
             },
             "redis": {
                 "enabled": redis_available,
                 "host": "localhost",
                 "port": 6379,
-                "timeout": 4,
+                "timeout": 2,
                 "auto_detect": True
             }
         },
