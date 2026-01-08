@@ -12,14 +12,10 @@ import warnings
 import pandas as pd
 import numpy as np
 
-# 导入日志模块
-from tradingagents.utils.logging_manager import get_logger
-logger = get_logger('agents')
-warnings.filterwarnings('ignore')
-
 # 导入统一日志系统
 from tradingagents.utils.logging_init import setup_dataflow_logging
 logger = setup_dataflow_logging()
+warnings.filterwarnings('ignore')
 
 # 导入统一数据源编码
 from tradingagents.constants import DataSourceCode

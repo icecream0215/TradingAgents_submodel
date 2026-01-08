@@ -12,10 +12,8 @@ from zoneinfo import ZoneInfo
 from tradingagents.config.runtime_settings import get_timezone_name
 
 
-from tradingagents.utils.logging_init import get_logger
+from tradingagents.utils.logging_init import get_logger, get_logger_manager
 
-# 导入日志模块
-from tradingagents.utils.logging_manager import get_logger, get_logger_manager
 logger = get_logger('agents')
 
 # 工具调用日志器

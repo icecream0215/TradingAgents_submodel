@@ -31,9 +31,6 @@ warnings.warn(
 
 # 导入统一日志系统
 from tradingagents.utils.logging_init import get_logger
-
-# 导入日志模块
-from tradingagents.utils.logging_manager import get_logger
 # 运行时设置：读取系统时区
 from tradingagents.config.runtime_settings import get_timezone_name
 logger = get_logger('agents')

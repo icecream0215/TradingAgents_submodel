@@ -20,9 +20,6 @@ from tradingagents.agents.utils.memory import FinancialSituationMemory
 
 # 导入统一日志系统
 from tradingagents.utils.logging_init import get_logger
-
-# 导入日志模块
-from tradingagents.utils.logging_manager import get_logger
 logger = get_logger('agents')
 from tradingagents.agents.utils.agent_states import (
     AgentState,
