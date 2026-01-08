@@ -1,0 +1,9 @@
+全球新闻搜索结果 - 2025-09-09
+==================================================
+无法获取全球新闻数据: <html>
+<head><title>404 Not Found</title></head>
+<body>
+<center><h1>404 Not Found</h1></center>
+<hr><center>nginx/1.26.3</center>
+</body>
+</html>
